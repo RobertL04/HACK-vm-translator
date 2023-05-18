@@ -14,8 +14,11 @@ const CODE_BUFFER_LIMIT: usize = 100;
 pub struct CodeGenerator<'a> {
     path_pointer: &'a Path,
     path_type: &'a PathType,
+
     a_l_commands: [&'a str; 9],
     mem_commands: [&'a str; 2],
+    branching_keywords: [&'a str; 3],
+
     segments: [&'a str; 9],
     output_file: File,
     is_debug_option: bool,
@@ -34,6 +37,9 @@ impl CodeGenerator<'_> {
         // memory access commands:
         let mem_commands = ["pop", "push"];
 
+        // branching keywords:
+        let branching_keywords = ["label", "if-goto", "goto"];
+
         // memory segments:
         let segments = [
             "local", "argument", "constant", "this", "that", "static", "pointer", "temp", "general",
@@ -48,11 +54,16 @@ impl CodeGenerator<'_> {
         return CodeGenerator {
             path_pointer,
             path_type,
+
             a_l_commands,
             mem_commands,
+            branching_keywords,
+
             segments,
             output_file,
             is_debug_option,
+
+            // keep track of labels and produce unique jump labels
             jump_counter, // in order to produce unique jump labels (for GOTOs).
         };
     }
@@ -102,7 +113,7 @@ impl CodeGenerator<'_> {
 
             let l = l.trim_end_matches("\r").trim_end_matches("\n"); // remove extra characters such as \r and \n.
 
-            let l_vec: Vec<&str> = l.split(" ").collect(); // split line in words (operators and arguments) and store them in a vector.
+            let mut l_vec: Vec<&str> = l.split(" ").collect(); // split line in words (operators and arguments) and store them in a vector.
 
             // figure out which type of operations the line includes.
             if self.a_l_commands.contains(&l_vec[0]) {
@@ -137,6 +148,9 @@ impl CodeGenerator<'_> {
                     );
                     panic!();
                 }
+                // TODO: fix this bug in a better way
+                l_vec[2] = l_vec[2].trim_end_matches("\t");
+
                 let mem_index: usize = match l_vec[2].parse() {
                     Ok(i) => i,
                     Err(_) => {
@@ -144,6 +158,7 @@ impl CodeGenerator<'_> {
                             "[ERROR] bad syntax. Index {} cannot be parsed as an unsigned integer.",
                             l_vec[2]
                         );
+                        eprintln!("{:#?}", l_vec);
                         panic!();
                     }
                 };
@@ -157,6 +172,24 @@ impl CodeGenerator<'_> {
                     generate_mem_code_block(mem_cmd, mem_segment, mem_index, filename); // generate assembly code using the arguments provided in the vm code.
 
                 code_buffer.append(&mut code_block); // append the generated code to the global buffer.
+            } else if self.branching_keywords.contains(&l_vec[0]) {
+                let branch_keyword = l_vec[0];
+
+                // expected: label <str> or if-goto <str> or goto <str>
+                if l_vec.len() < 2 {
+                    eprintln!("[ERROR] bad syntax. Line includes branching keyword but does not include any arguments.");
+                    panic!();
+                }
+
+                let goto_label = l_vec[1];
+
+                if self.is_debug_option {
+                    let comment = format!("\n// {} {}", branch_keyword, goto_label); // comment indicates which operation is being translated.
+                    code_buffer.push(comment);
+                }
+
+                let mut code_block = generate_branching_block(branch_keyword, goto_label, filename);
+                code_buffer.append(&mut code_block);
             } else {
                 eprintln!("[ERROR] bad syntax. First word in the line is neither a memory access command nor an arithmetic/logical operator.");
                 panic!();
@@ -166,6 +199,37 @@ impl CodeGenerator<'_> {
             write_to_file(&mut self.output_file, &mut code_buffer);
         }
     }
+}
+
+// TODO: for debugging, try to include expected PC for each instruction (remember to handle labels correctly, etc.)
+fn generate_branching_block(branch_keyword: &str, goto_label: &str, filename: &str) -> Vec<String> {
+    let mut code_block: Vec<String> = vec![];
+    // assumption: the same exact label cannot be used in multiple vm files
+    // that means if the same label is found in more than one file, each declaration is considered unique
+    let unique_label = format!("{}_{}", goto_label, filename);
+    match branch_keyword {
+        "label" => {
+            code_block.push(format!("({})", unique_label));
+        }
+        "goto" => {
+            code_block.push(format!("@{}", unique_label));
+            code_block.push("0;JMP".to_string());
+        }
+        "if-goto" => {
+            // expects that a value is pushed on the stack
+            code_block.append(&mut generate_mem_code_block("pop", "general", 13, filename)); // RAM[13]  = value on stack
+            code_block.push("@13".to_string()); // A = 13
+            code_block.push("D = M".to_string()); // D = RAM[13]
+            code_block.push(format!("@{}", unique_label));
+            code_block.push("D;JNE".to_string()); // if D!=0 jump
+        }
+        _ => {
+            // shouldn't be reached
+            eprintln!("[ERROR] unkown error.");
+            panic!();
+        }
+    }
+    return code_block;
 }
 
 // private functions
