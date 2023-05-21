@@ -17,8 +17,10 @@ pub fn generate_branching_block(
         code_block.push(comment);
     }
     // assumption: the same exact label cannot be used in multiple vm files
-    // that means if the same label is found in more than one file, each declaration is considered unique
-    let unique_label = format!("{}_{}", goto_label, filename);
+    // that means if the same label is found in more than one file, each declaration should be considered unique
+    // however for now: repitition is not expectd
+
+    let unique_label = format!("{}", goto_label);
     match branch_keyword {
         "label" => {
             code_block.push(format!("({})", unique_label));

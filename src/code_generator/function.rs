@@ -37,15 +37,14 @@ pub fn generate_function_call(
     function_name: &str,
     n_args: usize,
     filename: &str,
-    mut jump_counter: usize,
+    jump_counter_ref: &mut usize,
     is_debug_option: bool,
 ) -> Vec<String> {
     let mut code_block: Vec<String> = vec![];
 
-    jump_counter += 1;
-
+    *jump_counter_ref += 1;
     // push return label/address
-    let return_label = format!("{}_ret_{}", filename, jump_counter);
+    let return_label = format!("{}_ret_{}", function_name, *jump_counter_ref);
     code_block.push(format!("({return_label})")); // (return_label)
     code_block.push(format!("@{return_label}")); // A = return label
                                                  //push return label
@@ -112,7 +111,7 @@ pub fn generate_function_call(
     code_block.append(&mut generate_a_l_code_block(
         "sub",
         filename,
-        jump_counter,
+        jump_counter_ref,
         is_debug_option,
         DEFAULT_PADDING,
     )); // on top of the stack: SP - (n_args+5)
@@ -143,11 +142,9 @@ pub fn generate_function_call(
         DEFAULT_PADDING,
     ));
 
-    let function_label = format!("{}.{}", filename, function_name); // should be changed
-
     code_block.append(&mut generate_branching_block(
         "goto",
-        function_label.as_str(),
+        function_name,
         filename,
         is_debug_option,
         DEFAULT_PADDING,
@@ -158,9 +155,10 @@ pub fn generate_function_call(
 
 pub fn generate_function_return(
     filename: &str,
-    jump_counter: usize,
+    jump_counter_ref: &mut usize,
     is_debug_option: bool,
 ) -> Vec<String> {
+    *jump_counter_ref += 1;
     // retrieve return address
     let mut code_block: Vec<String> = vec![];
     code_block.append(&mut generate_mem_code_block(
@@ -183,7 +181,7 @@ pub fn generate_function_return(
     code_block.append(&mut generate_a_l_code_block(
         "sub",
         filename,
-        jump_counter,
+        jump_counter_ref,
         is_debug_option,
         DEFAULT_PADDING,
     )); // ret_addr_pointer = LCL - 5
@@ -226,7 +224,7 @@ pub fn generate_function_return(
     code_block.append(&mut generate_a_l_code_block(
         "add",
         filename,
-        jump_counter,
+        jump_counter_ref,
         is_debug_option,
         DEFAULT_PADDING,
     )); // *SP = ARG + 1
@@ -285,7 +283,7 @@ pub fn generate_function_return(
         code_block.append(&mut generate_a_l_code_block(
             "sub",
             filename,
-            jump_counter,
+            jump_counter_ref,
             is_debug_option,
             DEFAULT_PADDING,
         )); // SP -> ret_addr_pointer - n

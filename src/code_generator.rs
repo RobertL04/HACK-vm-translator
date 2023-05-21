@@ -142,7 +142,7 @@ impl CodeGenerator<'_> {
                 let mut a_l_code_block = generate_a_l_code_block(
                     a_l_cmd,
                     filename,
-                    self.jump_counter,
+                    &mut self.jump_counter,
                     self.is_debug_option,
                     NO_PADDING,
                 );
@@ -164,7 +164,7 @@ impl CodeGenerator<'_> {
                     panic!();
                 }
                 // TODO: fix this bug in a better way
-                l_vec[2] = l_vec[2].trim_end_matches("\t");
+                l_vec[2] = l_vec[2].trim_end_matches(|c| !char::is_numeric(c));
 
                 let mem_index: usize = match l_vec[2].parse() {
                     Ok(i) => i,
@@ -260,7 +260,7 @@ impl CodeGenerator<'_> {
                                 function_name,
                                 n_args,
                                 filename,
-                                self.jump_counter,
+                                &mut self.jump_counter,
                                 self.is_debug_option,
                             )
                         };
@@ -273,7 +273,7 @@ impl CodeGenerator<'_> {
                         }
                         code_buffer.append(&mut generate_function_return(
                             filename,
-                            self.jump_counter,
+                            &mut self.jump_counter,
                             self.is_debug_option,
                         ));
                     }
