@@ -60,3 +60,19 @@ pub fn search_vm_files(dir: &Path, files_vec_pointer: &mut Vec<PathBuf>) {
         }
     }
 }
+
+pub fn add_padding(s: &String, n: usize) -> String {
+    // naive padding (for now)
+    let mut new_string: String = "".to_owned();
+    for _ in 0..n {
+        new_string.push(' ');
+    }
+    new_string.push_str(s);
+    return new_string;
+}
+
+#[test]
+fn it_works() {
+    let result = add_padding(&"hello".to_string(), 4);
+    assert_eq!(result, "    hello");
+}
