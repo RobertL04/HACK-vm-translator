@@ -161,6 +161,7 @@ pub fn generate_function_return(
     *jump_counter_ref += 1;
     // retrieve return address
     let mut code_block: Vec<String> = vec![];
+
     code_block.append(&mut generate_mem_code_block(
         "push",
         "general",
@@ -168,34 +169,16 @@ pub fn generate_function_return(
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    ));
-    code_block.append(&mut generate_mem_code_block(
-        "push",
-        "constant",
-        5,
-        filename,
-        is_debug_option,
-        DEFAULT_PADDING,
-    ));
-
-    code_block.append(&mut generate_a_l_code_block(
-        "sub",
-        filename,
-        jump_counter_ref,
-        is_debug_option,
-        DEFAULT_PADDING,
-    )); // ret_addr_pointer = LCL - 5
-        // n => (RAM[n] = ret_addr) now on top of the stack
+    )); // push LCL
 
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "general",
-        15,
+        16,
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // RAM[15] = ret_addr_pointer
-
+    )); // pop LCL
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "argument",
@@ -228,35 +211,14 @@ pub fn generate_function_return(
         is_debug_option,
         DEFAULT_PADDING,
     )); // *SP = ARG + 1
-
-    // destroy stack
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "general",
-        0,
-        filename,
-        is_debug_option,
-        DEFAULT_PADDING,
-    )); // RAM[0] = SP = ARG+1
-
-    code_block.append(&mut generate_mem_code_block(
-        "push",
-        "general",
-        1,
+        17,
         filename,
         is_debug_option,
         DEFAULT_PADDING,
     ));
-
-    code_block.append(&mut generate_mem_code_block(
-        "pop",
-        "temp",
-        0,
-        filename,
-        is_debug_option,
-        DEFAULT_PADDING,
-    )); // pop LCL
-
     // restore stack pointers (THAT, THIS, ARG, LCL)
     for n in 1..=4 {
         if is_debug_option {
@@ -265,8 +227,8 @@ pub fn generate_function_return(
         }
         code_block.append(&mut generate_mem_code_block(
             "push",
-            "temp",
-            0,
+            "general",
+            16,
             filename,
             is_debug_option,
             DEFAULT_PADDING,
@@ -305,13 +267,28 @@ pub fn generate_function_return(
             DEFAULT_PADDING,
         ));
     }
+    code_block.append(&mut generate_mem_code_block(
+        "push",
+        "general",
+        17,
+        filename,
+        is_debug_option,
+        DEFAULT_PADDING,
+    )); // *SP = new sp stored in RAM[17]
+
+    // destroy stack
+    code_block.append(&mut generate_mem_code_block(
+        "pop",
+        "general",
+        0,
+        filename,
+        is_debug_option,
+        DEFAULT_PADDING,
+    )); // RAM[0] = SP = ARG+1
 
     code_block.push("@0".to_string());
     code_block.push("A = M".to_string()); // A = RAM[0]
-    code_block.push("M = M -1".to_string()); // *(RAM[0]) -=1 (annul top most value on the stack)
-    code_block.push("@15".to_string());
     code_block.push("A = M".to_string()); // A = RAM[13]
-    code_block.push("A = M".to_string()); // A = *RAM[13]
     code_block.push("0; JMP".to_string());
     return code_block;
 }

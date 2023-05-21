@@ -26,7 +26,10 @@ const CODE_BUFFER_SOFT_LIMIT: usize = 100;
 const DEFAULT_PADDING: usize = 4;
 const NO_PADDING: usize = 0;
 
+// TODO: bootstrapping!
+
 // TODO: better error handling
+
 pub struct CodeGenerator<'a> {
     path_pointer: &'a Path,
     path_type: &'a PathType,
