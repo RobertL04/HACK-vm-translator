@@ -45,7 +45,6 @@ pub fn generate_function_call(
     *jump_counter_ref += 1;
     // push return label/address
     let return_label = format!("{}_ret_{}", function_name, *jump_counter_ref);
-    code_block.push(format!("({return_label})")); // (return_label)
     code_block.push(format!("@{return_label}")); // A = return label
                                                  //push return label
     code_block.push("D = A".to_string());
@@ -149,6 +148,7 @@ pub fn generate_function_call(
         is_debug_option,
         DEFAULT_PADDING,
     ));
+    code_block.push(format!("({return_label})"));
 
     return code_block;
 }
@@ -172,6 +172,49 @@ pub fn generate_function_return(
     )); // push LCL
 
     code_block.append(&mut generate_mem_code_block(
+        "push",
+        "constant",
+        5,
+        filename,
+        is_debug_option,
+        DEFAULT_PADDING,
+    ));
+
+    code_block.append(&mut generate_a_l_code_block(
+        "sub",
+        filename,
+        jump_counter_ref,
+        is_debug_option,
+        DEFAULT_PADDING,
+    ));
+
+    code_block.append(&mut generate_mem_code_block(
+        "pop",
+        "general",
+        18,
+        filename,
+        is_debug_option,
+        DEFAULT_PADDING,
+    )); // RAM[15] = ret_addr_pointer
+
+    code_block.append(&mut vec![
+        "@18".to_string(),
+        "A = M".to_string(),
+        "D = M".to_string(),
+        "@18".to_string(),
+        "M = D".to_string(),
+    ]); // RAM[15] real return address
+
+    code_block.append(&mut generate_mem_code_block(
+        "push",
+        "general",
+        1,
+        filename,
+        is_debug_option,
+        DEFAULT_PADDING,
+    )); // push LCL
+
+    code_block.append(&mut generate_mem_code_block(
         "pop",
         "general",
         16,
@@ -179,6 +222,7 @@ pub fn generate_function_return(
         is_debug_option,
         DEFAULT_PADDING,
     )); // pop LCL
+
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "argument",
@@ -286,9 +330,8 @@ pub fn generate_function_return(
         DEFAULT_PADDING,
     )); // RAM[0] = SP = ARG+1
 
-    code_block.push("@0".to_string());
-    code_block.push("A = M".to_string()); // A = RAM[0]
-    code_block.push("A = M".to_string()); // A = RAM[13]
+    code_block.push("@18".to_string());
+    code_block.push("A = M".to_string()); // A = RAM[15]
     code_block.push("0; JMP".to_string());
     return code_block;
 }
