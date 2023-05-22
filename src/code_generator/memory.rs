@@ -168,7 +168,7 @@ pub fn generate_mem_code_block(
                 false => {
                     match mem_segment {
                         "constant" => {
-                            eprintln!("[ERROR] bad syntax. Cannot use pop with `constant`.");
+                            eprintln!("[ERROR] bad syntax. Cannot pop a constant.");
                             panic!();
                         }
                         "temp" => {

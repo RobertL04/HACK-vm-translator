@@ -1,5 +1,6 @@
 use crate::utils::{create_output_file, search_vm_files, write_to_file};
 use crate::PathType;
+use colored::*;
 use std::{
     fs::File,
     io::{BufReader, Read},
@@ -69,7 +70,7 @@ impl CodeGenerator<'_> {
         ];
 
         let output_path = create_output_file(path_pointer, path_type, is_debug_option);
-        println!("{output_path}");
+        println!("Output: {output_path}");
 
         let output_file = File::create(output_path).unwrap(); // create asm file.
         let jump_counter = 0;
@@ -98,9 +99,70 @@ impl CodeGenerator<'_> {
             PathType::File => files_vec.push(self.path_pointer.to_path_buf()),
             PathType::Dir => search_vm_files(self.path_pointer, &mut files_vec),
         }
-        for path_buf in files_vec {
+
+        let filename_vec: Vec<String> = (&files_vec)
+            .iter()
+            .map(|p| {
+                p.file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .trim_end_matches(".vm")
+                    .to_string()
+            })
+            .collect();
+        if filename_vec.contains(&"Sys".to_string()) {
+            let mut path_pointer_copy = self.path_pointer.clone().to_path_buf();
+            path_pointer_copy.push("Sys.vm");
+        } else {
+            println!(
+                "{}",
+                "[WARNING] file Sys.vm does not exist in directory.".purple()
+            );
+        }
+        if !filename_vec.contains(&"Main".to_string()) {
+            println!(
+                "{}",
+                "[WARNING] file Main.vm does not exist in directory.".purple()
+            )
+        }
+
+        for path_buf in &files_vec {
             self.generate_code_from_file(&path_buf.as_path());
         }
+    }
+
+    fn generate_bootstrapping(&mut self) -> Vec<String> {
+        let mut code_block: Vec<String> = vec![
+            "@256".to_string(),
+            "D = A".to_string(),
+            "@0".to_string(),
+            "M = D".to_string(),
+            "@1000".to_string(),
+            "D = A".to_string(),
+            "@1".to_string(),
+            "M = D".to_string(),
+            "@2000".to_string(),
+            "D = A".to_string(),
+            "@2".to_string(),
+            "M = D".to_string(),
+            "@3000".to_string(),
+            "D = A".to_string(),
+            "@3".to_string(),
+            "M = D".to_string(),
+            "@4000".to_string(),
+            "D = A".to_string(),
+            "@4".to_string(),
+            "M = D".to_string(),
+        ];
+        code_block.append(&mut generate_function_call(
+            "Sys.init",
+            0,
+            "Sys",
+            &mut self.jump_counter,
+            self.is_debug_option,
+        ));
+        return code_block;
     }
 
     fn generate_code_from_file(&mut self, file_path: &Path) {
@@ -124,6 +186,7 @@ impl CodeGenerator<'_> {
         buf_reader.read_to_string(&mut contents).unwrap();
         let lines: Vec<&str> = contents.split("\n").collect();
 
+        code_buffer.append(&mut self.generate_bootstrapping());
         for l in lines {
             if code_buffer.len() > CODE_BUFFER_SOFT_LIMIT {
                 write_to_file(&mut self.output_file, &mut code_buffer);
