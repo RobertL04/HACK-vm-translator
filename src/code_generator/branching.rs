@@ -1,6 +1,6 @@
 use crate::utils::add_padding;
 
-use super::{generate_mem_code_block, DEFAULT_PADDING};
+use super::{at, generate_mem_code_block, DEFAULT_PADDING};
 
 pub fn generate_branching_block(
     branch_keyword: &str,
@@ -39,7 +39,7 @@ pub fn generate_branching_block(
                 is_debug_option,
                 DEFAULT_PADDING,
             )); // RAM[13]  = value on stack
-            code_block.push("@13".to_string()); // A = 13
+            code_block.push(at(13)); // A = 13
             code_block.push("D = M".to_string()); // D = RAM[13]
             code_block.push(format!("@{}", unique_label));
             code_block.push("D;JNE".to_string()); // if D!=0 jump

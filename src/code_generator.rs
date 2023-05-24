@@ -1,4 +1,4 @@
-use crate::utils::{create_output_file, search_vm_files, write_to_file};
+use crate::utils::{create_output_path, search_vm_files, write_to_file};
 use crate::PathType;
 use colored::*;
 use std::{
@@ -27,20 +27,60 @@ const CODE_BUFFER_SOFT_LIMIT: usize = 100;
 const DEFAULT_PADDING: usize = 4;
 const NO_PADDING: usize = 0;
 
-// TODO: bootstrapping!
+const SP: usize = 0;
+const LCL: usize = 1;
+const ARG: usize = 2;
+const THIS: usize = 3;
+const THAT: usize = 4;
 
-// TODO: better error handling
+const SP_BASE_ADDRESS: usize = 256;
+const LCL_BASE_ADDRESS: usize = 1647;
+const ARG_BASE_ADDRESS: usize = 1747;
+const THIS_BASE_ADDRESS: usize = 1847;
+const THAT_BASE_ADDRESS: usize = 1947;
+
+fn at(n: usize) -> String {
+    return format!("@{}", n);
+}
+
+// arithmetic / logical commands:
+const A_L_KEYWORDS: [&'static str; 9] = ["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"];
+
+// memory access commands:
+const MEM_KEYWORDS: [&'static str; 2] = ["pop", "push"];
+
+// branching keywords:
+const BRANCHING_KEYWORDS: [&'static str; 3] = ["label", "if-goto", "goto"];
+
+// function keywords
+const FUNC_KEYWORDS: [&'static str; 3] = ["return", "function", "call"];
+
+enum Keyword {
+    FUNC(String),
+    MEM(String),
+    AL(String),
+    BRANCH(String),
+}
+
+impl Keyword {
+    fn from(s: &str) -> Option<Keyword> {
+        if A_L_KEYWORDS.contains(&s) {
+            return Some(Keyword::AL(s.to_string()));
+        } else if MEM_KEYWORDS.contains(&s) {
+            return Some(Keyword::MEM(s.to_string()));
+        } else if FUNC_KEYWORDS.contains(&s) {
+            return Some(Keyword::FUNC(s.to_string()));
+        } else if BRANCHING_KEYWORDS.contains(&s) {
+            return Some(Keyword::BRANCH(s.to_string()));
+        } else {
+            return None;
+        }
+    }
+}
 
 pub struct CodeGenerator<'a> {
     path_pointer: &'a Path,
     path_type: &'a PathType,
-
-    a_l_commands: [&'a str; 9],
-    mem_commands: [&'a str; 2],
-    branching_keywords: [&'a str; 3],
-    func_keywords: [&'a str; 3],
-
-    segments: [&'a str; 9],
     output_file: File,
     is_debug_option: bool,
     jump_counter: usize,
@@ -48,47 +88,29 @@ pub struct CodeGenerator<'a> {
 
 impl CodeGenerator<'_> {
     pub fn new<'a>(
-        path_pointer: &'a Path,
+        path_ref: &'a Path,
         path_type: &'a PathType,
         is_debug_option: bool,
     ) -> CodeGenerator<'a> {
-        // arithmetic / logical commands:
-        let a_l_commands = ["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"];
-
-        // memory access commands:
-        let mem_commands = ["pop", "push"];
-
-        // branching keywords:
-        let branching_keywords = ["label", "if-goto", "goto"];
-
-        // function keywords
-        let func_keywords = ["return", "function", "call"];
-
-        // memory segments:
-        let segments = [
-            "local", "argument", "constant", "this", "that", "static", "pointer", "temp", "general",
-        ];
-
-        let output_path = create_output_file(path_pointer, path_type, is_debug_option);
+        let output_path = create_output_path(path_ref, path_type, is_debug_option);
         println!("Output: {output_path}");
 
-        let output_file = File::create(output_path).unwrap(); // create asm file.
+        let output_file = File::create(&output_path).expect(
+            format!(
+                "[ERROR] couldn't create output file using the following path: {}",
+                output_path,
+            )
+            .as_str(),
+        ); // create asm file.
+
         let jump_counter = 0;
 
         return CodeGenerator {
-            path_pointer,
+            path_pointer: path_ref,
             path_type,
-
-            a_l_commands,
-            mem_commands,
-            branching_keywords,
-            func_keywords,
-
-            segments,
             output_file,
             is_debug_option,
-
-            jump_counter, // in order to produce unique jump labels (for GOTOs).
+            jump_counter, // in order to produce unique labels (for GOTOs).
         };
     }
 
@@ -111,10 +133,7 @@ impl CodeGenerator<'_> {
                     .to_string()
             })
             .collect();
-        if filename_vec.contains(&"Sys".to_string()) {
-            let mut path_pointer_copy = self.path_pointer.clone().to_path_buf();
-            path_pointer_copy.push("Sys.vm");
-        } else {
+        if !filename_vec.contains(&"Sys".to_string()) {
             println!(
                 "{}",
                 "[WARNING] file Sys.vm does not exist in directory.".purple()
@@ -130,39 +149,6 @@ impl CodeGenerator<'_> {
         for path_buf in &files_vec {
             self.generate_code_from_file(&path_buf.as_path());
         }
-    }
-
-    fn generate_bootstrapping(&mut self) -> Vec<String> {
-        let mut code_block: Vec<String> = vec![
-            "@256".to_string(),
-            "D = A".to_string(),
-            "@0".to_string(),
-            "M = D".to_string(),
-            "@1000".to_string(),
-            "D = A".to_string(),
-            "@1".to_string(),
-            "M = D".to_string(),
-            "@2000".to_string(),
-            "D = A".to_string(),
-            "@2".to_string(),
-            "M = D".to_string(),
-            "@3000".to_string(),
-            "D = A".to_string(),
-            "@3".to_string(),
-            "M = D".to_string(),
-            "@4000".to_string(),
-            "D = A".to_string(),
-            "@4".to_string(),
-            "M = D".to_string(),
-        ];
-        code_block.append(&mut generate_function_call(
-            "Sys.init",
-            0,
-            "Sys",
-            &mut self.jump_counter,
-            self.is_debug_option,
-        ));
-        return code_block;
     }
 
     fn generate_code_from_file(&mut self, file_path: &Path) {
@@ -181,183 +167,209 @@ impl CodeGenerator<'_> {
             }
             Ok(file) => file,
         };
+
         let mut buf_reader = BufReader::new(file);
         let mut contents = String::new();
-        buf_reader.read_to_string(&mut contents).unwrap();
+
+        buf_reader
+            .read_to_string(&mut contents)
+            .expect("couldn't parse content of the input file.");
+
         let lines: Vec<&str> = contents.split("\n").collect();
 
-        code_buffer.append(&mut self.generate_bootstrapping());
-        for l in lines {
+        code_buffer.append(&mut generate_bootstrapping(
+            &mut self.jump_counter,
+            self.is_debug_option,
+        ));
+
+        for line in lines {
             if code_buffer.len() > CODE_BUFFER_SOFT_LIMIT {
                 write_to_file(&mut self.output_file, &mut code_buffer);
             }
 
-            if l.trim() == "" || l.starts_with("//") {
-                // ignore comments and empty lines.
+            // ignore comments and empty lines.
+            if line.trim() == "" || line.starts_with("//") {
                 continue;
             }
 
-            let l = l.trim_end_matches("\r").trim_end_matches("\n"); // remove extra characters such as \r and \n.
+            let line = line.trim_end_matches("\r").trim_end_matches("\n"); // remove extra characters such as \r and \n.
 
-            let mut l_vec: Vec<&str> = l.split(" ").collect(); // split line in words (operators and arguments) and store them in a vector.
+            let mut line_vec: Vec<&str> = line.split(" ").collect(); // split line in words (operators and arguments) and store them in a vector.
 
-            // figure out which type of operations the line includes.
-            if self.a_l_commands.contains(&l_vec[0]) {
-                let a_l_cmd = l_vec[0];
-
-                let mut a_l_code_block = generate_a_l_code_block(
-                    a_l_cmd,
-                    filename,
-                    &mut self.jump_counter,
-                    self.is_debug_option,
-                    NO_PADDING,
-                );
-
-                code_buffer.append(&mut a_l_code_block);
-            } else if self.mem_commands.contains(&l_vec[0]) {
-                let mem_cmd = l_vec[0];
-                if l_vec.len() < 3 {
-                    eprintln!("[ERROR] bad syntax. Line includes memory access operator but doesn't include one of the following arguments: a memory segment or an index.");
-                    panic!();
-                }
-
-                let mem_segment = l_vec[1]; // store the memory segment provided
-                if !self.segments.contains(&mem_segment) {
-                    eprintln!(
-                        "[ERROR] bad syntax. Memory segment {} does not exist or is not supported.",
-                        { mem_segment }
-                    );
-                    panic!();
-                }
-                // TODO: fix this bug in a better way
-                l_vec[2] = l_vec[2].trim_end_matches(|c| !char::is_numeric(c));
-
-                let mem_index: usize = match l_vec[2].parse() {
-                    Ok(i) => i,
-                    Err(_) => {
-                        eprintln!(
-                            "[ERROR] bad syntax. Index {} cannot be parsed as an unsigned integer.",
-                            l_vec[2]
-                        );
-                        eprintln!("{:#?}", l_vec);
-                        panic!();
-                    }
-                };
-
-                let mut code_block = generate_mem_code_block(
-                    mem_cmd,
-                    mem_segment,
-                    mem_index,
-                    filename,
-                    self.is_debug_option,
-                    NO_PADDING,
-                ); // generate assembly code using the arguments provided in the vm code.
-
-                code_buffer.append(&mut code_block); // append the generated code to the global buffer.
-            } else if self.branching_keywords.contains(&l_vec[0]) {
-                let branch_keyword = l_vec[0];
-
-                // expected: label <str> or if-goto <str> or goto <str>
-                if l_vec.len() < 2 {
-                    eprintln!("[ERROR] bad syntax. Line includes branching keyword but does not include any arguments.");
-                    panic!();
-                }
-
-                let goto_label = l_vec[1];
-
-                let mut code_block = generate_branching_block(
-                    branch_keyword,
-                    goto_label,
-                    filename,
-                    self.is_debug_option,
-                    NO_PADDING, // means function does not require tabs
-                );
-                code_buffer.append(&mut code_block);
-            } else if self.func_keywords.contains(&l_vec[0]) {
-                let func_keyword = l_vec[0];
-
-                match func_keyword {
-                    // error checking
-                    "function" | "call" => {
-                        if l_vec.len() < 3 {
-                            eprintln!("[ERROR] bad syntax. Expected two arguments for function call or definition.");
-                            panic!()
-                        }
-                        let function_name = l_vec[1];
-                        if self.is_debug_option {
-                            let comment =
-                                format!("\n// {} {} {}", func_keyword, function_name, l_vec[2]); // l_vec[2] is local vars number
-                                                                                                 // or args number depending on the keyword
-                            code_buffer.push(comment);
-                        }
-
-                        let mut code_block = if func_keyword == "function" {
-                            let n_vars: usize = match l_vec[2].parse::<usize>() {
-                                Ok(n) => n,
-                                Err(e) => {
-                                    eprintln!("{e}");
-                                    panic!()
-                                }
-                            };
-
-                            // line starts with `function`
-                            generate_function_def(
-                                function_name,
-                                n_vars,
-                                filename,
-                                self.is_debug_option,
-                            )
-                        } else {
-                            let n_args: usize = match l_vec[2].parse::<usize>() {
-                                Ok(n) => n,
-                                Err(e) => {
-                                    eprintln!("{e}");
-                                    panic!()
-                                }
-                            };
-
-                            // line starts with `call`
-                            if self.is_debug_option {
-                                let comment =
-                                    format!("\n// {} {} {}", func_keyword, function_name, n_args); //call foo
-                                code_buffer.push(comment);
-                            }
-                            generate_function_call(
-                                function_name,
-                                n_args,
-                                filename,
-                                &mut self.jump_counter,
-                                self.is_debug_option,
-                            )
-                        };
-                        code_buffer.append(&mut code_block);
-                    }
-                    "return" => {
-                        if self.is_debug_option {
-                            let comment = format!("\n// {}", func_keyword); // return
-                            code_buffer.push(comment);
-                        }
-                        code_buffer.append(&mut generate_function_return(
+            match Keyword::from(&line_vec[0]) {
+                Some(keyword) => match keyword {
+                    Keyword::AL(a_l_cmd) => {
+                        let mut a_l_code_block = generate_a_l_code_block(
+                            &a_l_cmd,
                             filename,
                             &mut self.jump_counter,
                             self.is_debug_option,
-                        ));
+                            NO_PADDING,
+                        );
+
+                        code_buffer.append(&mut a_l_code_block);
                     }
-                    _ => {
-                        // should be unreachable
-                        eprintln!("[ERROR] unkown error.");
-                        panic!()
+                    Keyword::MEM(mem_cmd) => {
+                        if line_vec.len() < 3 {
+                            eprintln!("[ERROR] bad syntax. Line includes memory access operator but doesn't include one of the following arguments: a memory segment or an index.");
+                            panic!();
+                        }
+
+                        let mem_segment = line_vec[1];
+
+                        line_vec[2] = line_vec[2].trim_end_matches(|c| !char::is_numeric(c));
+
+                        let mem_index: usize = match line_vec[2].parse() {
+                            Ok(i) => i,
+                            Err(_) => {
+                                eprintln!(
+                                    "[ERROR] bad syntax. Index {} cannot be parsed as an unsigned integer.",
+                                    line_vec[2]
+                                );
+                                eprintln!("{:#?}", line_vec);
+                                panic!();
+                            }
+                        };
+
+                        let mut code_block = generate_mem_code_block(
+                            &mem_cmd,
+                            mem_segment,
+                            mem_index,
+                            filename,
+                            self.is_debug_option,
+                            NO_PADDING,
+                        );
+                        code_buffer.append(&mut code_block);
                     }
+                    Keyword::BRANCH(branch_cmd) => {
+                        // expected: label <str> or if-goto <str> or goto <str>
+                        if line_vec.len() < 2 {
+                            eprintln!("[ERROR] bad syntax. Line includes branching keyword but does not include a label.");
+                            panic!();
+                        }
+
+                        let goto_label = line_vec[1];
+
+                        let mut code_block = generate_branching_block(
+                            &branch_cmd,
+                            goto_label,
+                            filename,
+                            self.is_debug_option,
+                            NO_PADDING,
+                        );
+                        code_buffer.append(&mut code_block);
+                    }
+                    Keyword::FUNC(func_keyword) => {
+                        match func_keyword.as_str() {
+                            "function" | "call" => {
+                                if line_vec.len() < 3 {
+                                    eprintln!("[ERROR] bad syntax. Expected two arguments for function call or definition.");
+                                    panic!()
+                                }
+                                let function_name = line_vec[1];
+                                if self.is_debug_option {
+                                    let comment = format!(
+                                        "\n// {} {} {}",
+                                        func_keyword, function_name, line_vec[2]
+                                    ); // line_vec[2] = n_args or n_vars
+                                    code_buffer.push(comment);
+                                }
+
+                                let mut code_block = if func_keyword == "function" {
+                                    let n_vars: usize = match line_vec[2].parse::<usize>() {
+                                        Ok(n) => n,
+                                        Err(e) => {
+                                            eprintln!("{e}");
+                                            panic!()
+                                        }
+                                    };
+
+                                    generate_function_def(
+                                        function_name,
+                                        n_vars,
+                                        filename,
+                                        self.is_debug_option,
+                                    )
+                                } else {
+                                    let n_args: usize = match line_vec[2].parse::<usize>() {
+                                        Ok(n) => n,
+                                        Err(e) => {
+                                            eprintln!("{e}");
+                                            panic!()
+                                        }
+                                    };
+
+                                    generate_function_call(
+                                        function_name,
+                                        n_args,
+                                        filename,
+                                        &mut self.jump_counter,
+                                        self.is_debug_option,
+                                    )
+                                };
+                                code_buffer.append(&mut code_block);
+                            }
+                            "return" => {
+                                if self.is_debug_option {
+                                    let comment = format!("\n// {}", func_keyword);
+                                    code_buffer.push(comment);
+                                }
+                                code_buffer.append(&mut generate_function_return(
+                                    filename,
+                                    &mut self.jump_counter,
+                                    self.is_debug_option,
+                                ));
+                            }
+                            _ => {
+                                // should not be reachable
+                                eprintln!("[ERROR] unkown error.");
+                                panic!();
+                            }
+                        }
+                    }
+                },
+                None => {
+                    eprintln!("[ERROR] bad syntax. Line starts with unkown keyword.");
+                    panic!();
                 }
-            } else {
-                eprintln!("[ERROR] bad syntax. Line starts with unkown keyword.");
-                panic!();
             }
         }
+
         if code_buffer.len() > 0 {
             write_to_file(&mut self.output_file, &mut code_buffer);
         }
     }
 }
 
-// TODO: for debugging, try to include expected PC for each instruction (remember to handle labels correctly, etc.)
+fn generate_bootstrapping(jump_counter_ref: &mut usize, is_debug_option: bool) -> Vec<String> {
+    let mut code_block: Vec<String> = vec![
+        at(SP_BASE_ADDRESS),
+        "D = A".to_string(),
+        at(SP),
+        "M = D".to_string(),
+        at(LCL_BASE_ADDRESS),
+        "D = A".to_string(),
+        at(LCL),
+        "M = D".to_string(),
+        at(ARG_BASE_ADDRESS),
+        "D = A".to_string(),
+        at(ARG),
+        "M = D".to_string(),
+        at(THIS_BASE_ADDRESS),
+        "D = A".to_string(),
+        at(THIS),
+        "M = D".to_string(),
+        at(THAT_BASE_ADDRESS),
+        "D = A".to_string(),
+        at(THAT),
+        "M = D".to_string(),
+    ];
+    code_block.append(&mut generate_function_call(
+        "Sys.init",
+        0,
+        "Sys",
+        jump_counter_ref,
+        is_debug_option,
+    ));
+    return code_block;
+}

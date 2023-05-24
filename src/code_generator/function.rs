@@ -1,11 +1,19 @@
 use std::vec;
 
 use super::{
-    arithmetic_logic::generate_a_l_code_block, branching::generate_branching_block,
-    memory::generate_mem_code_block, DEFAULT_PADDING,
+    arithmetic_logic::generate_a_l_code_block, at, branching::generate_branching_block,
+    memory::generate_mem_code_block, DEFAULT_PADDING, SP,
 };
 
-// must return a value
+// The last 3 registers in the `temp` segment are used by the vm translator
+// and shouldn't be used in the actual vm code being translated.
+//
+// Optimizing logical/arithmetic commands,
+// may allow the vm translator to use less temp placeholders.
+const TEMP_X: usize = 10;
+const TEMP_Y: usize = 11;
+const TEMP_Z: usize = 12;
+
 pub fn generate_function_def(
     function_name: &str,
     n_vars: usize,
@@ -48,10 +56,10 @@ pub fn generate_function_call(
     code_block.push(format!("@{return_label}")); // A = return label
                                                  //push return label
     code_block.push("D = A".to_string());
-    code_block.push("@0".to_string());
+    code_block.push(at(SP));
     code_block.push("A = M".to_string());
     code_block.push("M = D".to_string());
-    code_block.push("@0".to_string());
+    code_block.push(at(SP));
     code_block.push("M = M+1".to_string());
 
     code_block.append(&mut generate_mem_code_block(
@@ -191,19 +199,19 @@ pub fn generate_function_return(
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "general",
-        18,
+        TEMP_Y,
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // RAM[15] = ret_addr_pointer
+    )); // RAM[POINTER_TO_RETURN_ADDRESS_POINTER] = return_address_pointer
 
     code_block.append(&mut vec![
-        "@18".to_string(),
+        at(TEMP_Y),
         "A = M".to_string(),
         "D = M".to_string(),
-        "@18".to_string(),
+        at(TEMP_Y),
         "M = D".to_string(),
-    ]); // RAM[15] real return address
+    ]); // RAM[TEMPy] = real return address
 
     code_block.append(&mut generate_mem_code_block(
         "push",
@@ -217,11 +225,11 @@ pub fn generate_function_return(
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "general",
-        16,
+        TEMP_X,
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // pop LCL
+    )); // pop endrame
 
     code_block.append(&mut generate_mem_code_block(
         "pop",
@@ -258,7 +266,7 @@ pub fn generate_function_return(
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "general",
-        17,
+        TEMP_Z,
         filename,
         is_debug_option,
         DEFAULT_PADDING,
@@ -272,7 +280,7 @@ pub fn generate_function_return(
         code_block.append(&mut generate_mem_code_block(
             "push",
             "general",
-            16,
+            TEMP_X,
             filename,
             is_debug_option,
             DEFAULT_PADDING,
@@ -294,11 +302,11 @@ pub fn generate_function_return(
             DEFAULT_PADDING,
         )); // SP -> ret_addr_pointer - n
         code_block.append(&mut vec![
-            "@0".to_string(),
+            at(SP),
             "A = M - 1".to_string(), // A =SP -1
             "A = M".to_string(),     // go to pointer
             "D = M".to_string(),     // go to address pointed to
-            "@0".to_string(),
+            at(SP),
             "A = M-1".to_string(), // A = SP-1
             "M = D".to_string(),   // replace pointer with value
         ]);
@@ -314,11 +322,11 @@ pub fn generate_function_return(
     code_block.append(&mut generate_mem_code_block(
         "push",
         "general",
-        17,
+        TEMP_Z,
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // *SP = new sp stored in RAM[17]
+    )); // *SP = new sp stored in RAM[TEMP_Z]
 
     // destroy stack
     code_block.append(&mut generate_mem_code_block(
@@ -330,8 +338,8 @@ pub fn generate_function_return(
         DEFAULT_PADDING,
     )); // RAM[0] = SP = ARG+1
 
-    code_block.push("@18".to_string());
-    code_block.push("A = M".to_string()); // A = RAM[15]
+    code_block.push(at(TEMP_Y));
+    code_block.push("A = M".to_string());
     code_block.push("0; JMP".to_string());
     return code_block;
 }

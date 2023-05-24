@@ -4,24 +4,45 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use colored::Colorize;
+
 use crate::PathType;
 
-// collection of useful methods
-
-pub fn write_to_file(file_pointer: &mut File, code_buffer_pointer: &mut Vec<String>) {
-    let code_block_as_str = code_buffer_pointer.join("\n");
+/// Writes the content of `code_buffer_ref` to the output file, then empties the buffer.
+///
+/// Expects the buffer to be made up of many assembly lines but does not check for correctness.
+pub fn write_to_file(file_pointer: &mut File, code_buffer_ref: &mut Vec<String>) {
+    code_buffer_ref.push("\n".to_string());
+    let code_block_as_str = code_buffer_ref.join("\n");
     file_pointer
         .write_all(&code_block_as_str.as_bytes())
         .unwrap();
-    file_pointer.write_all("\n".as_bytes()).unwrap();
-    code_buffer_pointer.clear();
+    code_buffer_ref.clear();
 }
 
-//  allows user to create seperate asm file that includes comments but cannot be executed using the CPU emulator included in the NAND To Tetris software suite.
-pub fn create_output_file(path: &Path, path_type: &PathType, debug_option: bool) -> String {
+/// Constructs[^note] a suitable output path for the assembly file.
+///
+/// If `path_type` is `File`, the same path but with .asm extension is returned.
+///
+/// If `path_type` is `Dir`, the file is put inside the directory and has its name.
+///
+/// If `is_debug_option` is true, the extension is prefixed with `.debug`.
+///
+/// # Example:
+/// ```
+/// use std::path::Path;
+/// use crate::PathType;
+/// let path = Path::new(".../test_directory");
+/// let output_path = create_output_path(&path, &PathType::Dir, true);
+/// // output_path: .../test_directory/test_directory.debug.asm
+/// ```
+///
+/// [^note]: the function returns a string to the file, but does not create the output file.
+/// The caller should use the returned string in order to create the output file.
+pub fn create_output_path(path: &Path, path_type: &PathType, is_debug_option: bool) -> String {
     let output_path: String = match path_type {
         PathType::File => {
-            if debug_option {
+            if is_debug_option {
                 format!(
                     "{}.debug.asm",
                     path.to_str().unwrap().trim_end_matches(".vm")
@@ -35,13 +56,13 @@ pub fn create_output_file(path: &Path, path_type: &PathType, debug_option: bool)
                 "{}.asm",
                 path.to_path_buf().iter().last().unwrap().to_str().unwrap()
             );
-            if debug_option {
+            if is_debug_option {
                 file_name = format!(
                     "{}.debug.asm",
                     path.to_path_buf().iter().last().unwrap().to_str().unwrap()
                 );
             }
-            let mut temp_path = path.to_path_buf().clone();
+            let mut temp_path = path.to_path_buf();
             temp_path.push(file_name);
             temp_path.as_path().to_str().unwrap().to_string()
         }
@@ -49,30 +70,37 @@ pub fn create_output_file(path: &Path, path_type: &PathType, debug_option: bool)
     return output_path;
 }
 
-pub fn search_vm_files(dir: &Path, files_vec_pointer: &mut Vec<PathBuf>) {
+/// Looks for all vm files in a given directory.
+///
+/// Prints warning if argument is not a directory.
+pub fn search_vm_files(dir: &Path, files_vec_ref: &mut Vec<PathBuf>) {
     if dir.is_dir() {
         for entry in fs::read_dir(dir).unwrap() {
-            let entry_ = entry.unwrap();
-            let path = entry_.path();
+            let path = entry.unwrap().path();
             if !path.is_dir() && path.to_str().unwrap().ends_with(".vm") {
-                files_vec_pointer.push(path);
+                files_vec_ref.push(path);
             }
         }
+    } else {
+        println!(
+            "{}",
+            "[WARNING] in function search_vm_files: argument dir is not a directory".purple()
+        )
     }
 }
 
+/// Adds `n` spaces at the beginning of the supplied string `s`.
+///
+/// # Example:
+/// ```
+/// let string_with_padding = add_padding(&String::from("hello"), 2);
+/// assert_eq!("  hello", string_with_padding);
+/// ```
 pub fn add_padding(s: &String, n: usize) -> String {
-    // naive padding (for now)
     let mut new_string: String = "".to_owned();
     for _ in 0..n {
         new_string.push(' ');
     }
     new_string.push_str(s);
     return new_string;
-}
-
-#[test]
-fn it_works() {
-    let result = add_padding(&"hello".to_string(), 4);
-    assert_eq!(result, "    hello");
 }

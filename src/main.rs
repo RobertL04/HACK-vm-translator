@@ -36,8 +36,8 @@ fn main() {
     let path_type: PathType;
     // check if file path exists and has vm extension:
     if !(is_dir_option ^ is_file_option) {
-        // eprintln!("[ERROR] Input file does not have `.vm` extension. Please provide a file that includes HACK vm code and has `.vm` extension.");
-        eprintln!("[ERROR] incorrect arguments."); // TODO: print help!
+        eprintln!("[ERROR] incorrect arguments.");
+        // TODO: print help
         panic!();
     } else {
         if is_dir_option {
@@ -55,6 +55,14 @@ fn main() {
     }
 
     let path = Path::new(&path_str);
+    if !path.exists() {
+        eprintln!(
+            "Path {} does not exist or couldn't be parsed correctly.",
+            path_str
+        );
+        // TODO: print help / usage
+        panic!();
+    }
 
     let mut code_gen = CodeGenerator::new(&path, &path_type, is_debug_option);
     code_gen.generate_code();
