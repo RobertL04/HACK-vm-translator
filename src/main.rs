@@ -9,7 +9,6 @@ pub enum PathType {
     File,
 }
 
-// TODO: generate helpful comments
 fn main() {
     // syntax:
     // 1) ./program --dir directory_path => output directory.asm

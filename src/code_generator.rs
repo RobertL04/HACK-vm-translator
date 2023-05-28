@@ -1,6 +1,7 @@
 use crate::utils::{create_output_path, search_vm_files, write_to_file};
 use crate::PathType;
 use colored::*;
+use std::fmt::Display;
 use std::{
     fs::File,
     io::{BufReader, Read},
@@ -39,8 +40,8 @@ const ARG_BASE_ADDRESS: usize = 1747;
 const THIS_BASE_ADDRESS: usize = 1847;
 const THAT_BASE_ADDRESS: usize = 1947;
 
-fn at(n: usize) -> String {
-    return format!("@{}", n);
+fn at<T: Display>(address: T) -> String {
+    return format!("@{}", address);
 }
 
 // arithmetic / logical commands:

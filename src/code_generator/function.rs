@@ -7,13 +7,17 @@ use super::{
 
 // The last 3 registers in the `temp` segment are used by the vm translator
 // and shouldn't be used in the actual vm code being translated.
-//
-// Optimizing logical/arithmetic commands,
-// may allow the vm translator to use less temp placeholders.
+
+/// Used to temporarily store the endframe address
 const TEMP_X: usize = 10;
+
+/// Used to retrieve return address
 const TEMP_Y: usize = 11;
+
+/// Used to temporarily store the new stack pointer in order to destroy the stack
 const TEMP_Z: usize = 12;
 
+/// Assumes that the parameter `function_name` is unique (Class.function):
 pub fn generate_function_def(
     function_name: &str,
     n_vars: usize,
@@ -21,9 +25,6 @@ pub fn generate_function_def(
     is_debug_option: bool,
 ) -> Vec<String> {
     let mut code_block: Vec<String> = vec![];
-    // let function_label = format!("{filename}.{function_name}"); // agreed upon format Foo.bar
-    // assumption: function_name = Class.method
-
     code_block.push(format!("({function_name})"));
 
     for _ in 0..n_vars {
@@ -40,7 +41,7 @@ pub fn generate_function_def(
     return code_block;
 }
 
-// assumption: before calling a function, the neccessary args are pushed
+/// Assumption: before calling a function, the neccessary arguments are pushed on the stack
 pub fn generate_function_call(
     function_name: &str,
     n_args: usize,
@@ -51,16 +52,19 @@ pub fn generate_function_call(
     let mut code_block: Vec<String> = vec![];
 
     *jump_counter_ref += 1;
-    // push return label/address
+
     let return_label = format!("{}_ret_{}", function_name, *jump_counter_ref);
-    code_block.push(format!("@{return_label}")); // A = return label
-                                                 //push return label
-    code_block.push("D = A".to_string());
-    code_block.push(at(SP));
-    code_block.push("A = M".to_string());
-    code_block.push("M = D".to_string());
-    code_block.push(at(SP));
-    code_block.push("M = M+1".to_string());
+    // push return label/address
+    code_block.append(&mut vec![
+        at(&return_label),
+        //push return label
+        "D = A".to_string(),
+        at(SP),
+        "A = M".to_string(),
+        "M = D".to_string(),
+        at(SP),
+        "M = M+1".to_string(),
+    ]);
 
     code_block.append(&mut generate_mem_code_block(
         "push",
@@ -114,7 +118,6 @@ pub fn generate_function_call(
         DEFAULT_PADDING,
     ));
 
-    // TODO: check for off-by-one errors
     code_block.append(&mut generate_a_l_code_block(
         "sub",
         filename,
@@ -170,6 +173,7 @@ pub fn generate_function_return(
     // retrieve return address
     let mut code_block: Vec<String> = vec![];
 
+    // push LCL
     code_block.append(&mut generate_mem_code_block(
         "push",
         "general",
@@ -177,7 +181,7 @@ pub fn generate_function_return(
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // push LCL
+    ));
 
     code_block.append(&mut generate_mem_code_block(
         "push",
@@ -188,6 +192,7 @@ pub fn generate_function_return(
         DEFAULT_PADDING,
     ));
 
+    // leaves (LCL-5) on top of the stack
     code_block.append(&mut generate_a_l_code_block(
         "sub",
         filename,
@@ -196,6 +201,7 @@ pub fn generate_function_return(
         DEFAULT_PADDING,
     ));
 
+    // RAM[TEMP_Y] = LCL-5 = pointer to return address
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "general",
@@ -203,16 +209,18 @@ pub fn generate_function_return(
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // RAM[POINTER_TO_RETURN_ADDRESS_POINTER] = return_address_pointer
+    ));
 
+    // RAM[TEMP_Y] = *(LCL-5) = real return address
     code_block.append(&mut vec![
         at(TEMP_Y),
         "A = M".to_string(),
         "D = M".to_string(),
         at(TEMP_Y),
         "M = D".to_string(),
-    ]); // RAM[TEMPy] = real return address
+    ]);
 
+    // push LCL
     code_block.append(&mut generate_mem_code_block(
         "push",
         "general",
@@ -220,8 +228,9 @@ pub fn generate_function_return(
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // push LCL
+    ));
 
+    // pop endframe address (equivalent to LCL)
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "general",
@@ -229,8 +238,9 @@ pub fn generate_function_return(
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // pop endrame
+    ));
 
+    // *(ARG+0) = return value (is on top of the stack)
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "argument",
@@ -238,8 +248,9 @@ pub fn generate_function_return(
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // *(ARG+0) = return value (is on top of the stack)
+    ));
 
+    // *SP = ARG
     code_block.append(&mut generate_mem_code_block(
         "push",
         "general",
@@ -247,7 +258,9 @@ pub fn generate_function_return(
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // *SP = ARG
+    ));
+
+    // *SP = 1
     code_block.append(&mut generate_mem_code_block(
         "push",
         "constant",
@@ -255,14 +268,18 @@ pub fn generate_function_return(
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // *SP = 1
+    ));
+
+    // *SP = ARG + 1
     code_block.append(&mut generate_a_l_code_block(
         "add",
         filename,
         jump_counter_ref,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // *SP = ARG + 1
+    ));
+
+    // RAM[TEMP_Z] = ARG+1
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "general",
@@ -271,12 +288,15 @@ pub fn generate_function_return(
         is_debug_option,
         DEFAULT_PADDING,
     ));
+
     // restore stack pointers (THAT, THIS, ARG, LCL)
     for n in 1..=4 {
         if is_debug_option {
             code_block.push("\n".to_string());
             code_block.push(format!("// restoring *(addr - {})", n));
         }
+
+        // push endframe address that was previously saved in RAM[TEMP_X] (see above)
         code_block.append(&mut generate_mem_code_block(
             "push",
             "general",
@@ -284,8 +304,9 @@ pub fn generate_function_return(
             filename,
             is_debug_option,
             DEFAULT_PADDING,
-        )); // push endframe
+        ));
 
+        // *SP = n
         code_block.append(&mut generate_mem_code_block(
             "push",
             "constant",
@@ -293,23 +314,29 @@ pub fn generate_function_return(
             filename,
             is_debug_option,
             DEFAULT_PADDING,
-        )); //  if n = 1 => THAT
+        ));
+
+        // *SP = endframe address - n
         code_block.append(&mut generate_a_l_code_block(
             "sub",
             filename,
             jump_counter_ref,
             is_debug_option,
             DEFAULT_PADDING,
-        )); // SP -> ret_addr_pointer - n
+        ));
+
+        // RAM[endframe address - n] = address to old segment pointers (that belongs to the caller function)
         code_block.append(&mut vec![
             at(SP),
-            "A = M - 1".to_string(), // A =SP -1
-            "A = M".to_string(),     // go to pointer
-            "D = M".to_string(),     // go to address pointed to
+            "A = M - 1".to_string(), // go to endframe address-n
+            "A = M".to_string(),     // go to base address stored in the (old) segment pointer
+            "D = M".to_string(),     // D = base address of the old segment
             at(SP),
-            "A = M-1".to_string(), // A = SP-1
-            "M = D".to_string(),   // replace pointer with value
+            "A = M-1".to_string(),
+            "M = D".to_string(), // replace pointer with base address of the old segment
         ]);
+
+        // replaces the current segment pointer with the base address of the old segment
         code_block.append(&mut generate_mem_code_block(
             "pop",
             "general",
@@ -319,6 +346,8 @@ pub fn generate_function_return(
             DEFAULT_PADDING,
         ));
     }
+
+    // *SP = new sp stored in RAM[TEMP_Z]
     code_block.append(&mut generate_mem_code_block(
         "push",
         "general",
@@ -326,9 +355,10 @@ pub fn generate_function_return(
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // *SP = new sp stored in RAM[TEMP_Z]
+    ));
 
     // destroy stack
+    // RAM[0] = SP = ARG+1
     code_block.append(&mut generate_mem_code_block(
         "pop",
         "general",
@@ -336,8 +366,9 @@ pub fn generate_function_return(
         filename,
         is_debug_option,
         DEFAULT_PADDING,
-    )); // RAM[0] = SP = ARG+1
+    ));
 
+    // jump to return address
     code_block.push(at(TEMP_Y));
     code_block.push("A = M".to_string());
     code_block.push("0; JMP".to_string());

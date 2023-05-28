@@ -2,6 +2,10 @@ use crate::utils::add_padding;
 
 use super::{at, generate_mem_code_block, DEFAULT_PADDING};
 
+/// Assumes that `goto_label` is unique accross all vm files.
+///
+/// When `if-goto` is used, it is expected that a boolean value is pushed on the stack.
+/// The author of the vm code is responsible for ensuring that said condition is true.
 pub fn generate_branching_block(
     branch_keyword: &str,
     goto_label: &str,
@@ -12,13 +16,10 @@ pub fn generate_branching_block(
     let mut code_block: Vec<String> = vec![];
 
     if is_debug_option {
-        let comment = format!("// {} {}", branch_keyword, goto_label); // comment indicates which operation is being translated.
+        let comment = format!("// {} {}", branch_keyword, goto_label);
         code_block.push("\n".to_string());
         code_block.push(comment);
     }
-    // assumption: the same exact label cannot be used in multiple vm files
-    // that means if the same label is found in more than one file, each declaration should be considered unique
-    // however for now: repitition is not expectd
 
     let unique_label = format!("{}", goto_label);
     match branch_keyword {
@@ -26,11 +27,10 @@ pub fn generate_branching_block(
             code_block.push(format!("({})", unique_label));
         }
         "goto" => {
-            code_block.push(format!("@{}", unique_label));
+            code_block.push(at(unique_label));
             code_block.push("0;JMP".to_string());
         }
         "if-goto" => {
-            // expects that a value is pushed on the stack
             code_block.append(&mut generate_mem_code_block(
                 "pop",
                 "general",
@@ -38,15 +38,17 @@ pub fn generate_branching_block(
                 filename,
                 is_debug_option,
                 DEFAULT_PADDING,
-            )); // RAM[13]  = value on stack
-            code_block.push(at(13)); // A = 13
-            code_block.push("D = M".to_string()); // D = RAM[13]
-            code_block.push(format!("@{}", unique_label));
-            code_block.push("D;JNE".to_string()); // if D!=0 jump
+            ));
+            code_block.push(at(13));
+            code_block.push("D = M".to_string());
+            code_block.push(at(unique_label));
+            code_block.push("D;JNE".to_string());
         }
         _ => {
-            // shouldn't be reached
-            eprintln!("[ERROR] unkown error.");
+            eprintln!(
+                "[ERROR] keyword {} cannot be recognized as a branching command.",
+                branch_keyword
+            );
             panic!();
         }
     }

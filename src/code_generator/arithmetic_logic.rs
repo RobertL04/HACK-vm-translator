@@ -41,11 +41,13 @@ pub fn generate_a_l_code_block(
         );
         code_block.append(&mut pop2);
     }
+
     code_block.push(at(13)); // A = 13
     code_block.push("D = M".to_string()); // store content in D
 
     let mut temp_vec: Vec<String>;
-
+    let label_if_true = format!("true_expression{}", *jump_counter_ref);
+    let label_if_false = format!("false_expression{}", *jump_counter_ref);
     match a_l_cmd {
         "add" => {
             temp_vec = vec![
@@ -56,8 +58,7 @@ pub fn generate_a_l_code_block(
         }
         "sub" => {
             temp_vec = vec![
-                at(14), // go to temp 2
-                // TODO: make sure this is correct:
+                at(14),                  // go to temp 2
                 "D = M - D".to_string(), // D  = temp2 - temp1
                 "M = D".to_string(),     // replace temp 2 with the value of temp2 - temp1
             ];
@@ -94,16 +95,16 @@ pub fn generate_a_l_code_block(
             temp_vec = vec![
                 at(14),                  // go to temp 2
                 "D = M - D".to_string(), // D  = temp2 - temp1 (order doesn't matter since we're checking for inequality with 0)
-                format!("@true_expression{}", *jump_counter_ref),
+                at(&label_if_true),
                 "D;JEQ".to_string(),
                 at(14),
                 "M = 0".to_string(),
-                format!("@false_expression{}", *jump_counter_ref),
+                at(&label_if_false),
                 "0;JMP".to_string(),
-                format!("(true_expression{})", *jump_counter_ref),
+                format!("({label_if_true})"),
                 at(14),
                 "M = -1".to_string(),
-                format!("(false_expression{})", *jump_counter_ref),
+                format!("({label_if_false})"),
             ];
         }
         "gt" | "lt" => {
@@ -119,16 +120,16 @@ pub fn generate_a_l_code_block(
 
             // the rest is the same
             temp_vec = vec![
-                format!("@true_expression{}", *jump_counter_ref),
+                at(&label_if_true),
                 "D;JGT".to_string(), // jump to (greater) only if D>0
                 at(14),              // go to temp 2 (this code will be executed if NOT[D > 0])
                 "M = 0".to_string(), // set temp2 to false
-                format!("@false_expression{}", *jump_counter_ref),
+                at(&label_if_false),
                 "0;JMP".to_string(),
-                format!("(true_expression{})", *jump_counter_ref),
+                format!("({label_if_true})"),
                 at(14),               // go to temp 2
                 "M = -1".to_string(), // set temp2 to true since D>0
-                format!("(false_expression{})", *jump_counter_ref),
+                format!("({label_if_false})"),
             ];
         }
         _ => {

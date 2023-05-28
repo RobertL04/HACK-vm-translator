@@ -9,7 +9,7 @@ const SEGMENT: [&'static str; 9] = [
     "local", "argument", "constant", "this", "that", "static", "pointer", "temp", "general",
 ];
 
-/// generates assembly for push/pop commands
+/// Generates assembly for push/pop commands
 ///
 /// # Examples:
 /// To translate:
@@ -120,7 +120,7 @@ pub fn generate_mem_code_block(
                             let label: &str = if mem_index == 0 { "THIS" } else { "THAT" };
 
                             let mut temp_vec: Vec<String> = vec![
-                                format!("@{}", label), // A = THIS/THAT (this/that are pointers to their respective segments)
+                                at(label),           // A = THIS/THAT (this/that are pointers to their respective segments)
                                 "D = M".to_string(), // D = *(this/that) which means D = (base address of this/that segment))
                                 at(SP),              // A = 0
                                 "A = M".to_string(), // go to the variable that SP points to
@@ -225,7 +225,7 @@ pub fn generate_mem_code_block(
                                 at(SP),                  // A = 0
                                 "A = M".to_string(),     // go to the variable that SP points to
                                 "M = D".to_string(),     // store the value in D
-                                format!("@{}", label), // A = THIS/THAT (this/that are pointers to their respective segments)
+                                at(label), // A = THIS/THAT (this/that are pointers to their respective segments)
                                 "M = D".to_string(), // THIS/THAT = the highest number in the stack (stored in D)
                             ];
 
